@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sync Music Player</title>
+  <style>
+    body { font-family: sans-serif; max-width: 400px; margin: 2em auto; }
+    #login { margin-bottom: 2em; }
+    #player { display: none; }
+  </style>
+</head>
+<body>
+  <h2>Sync Music Player</h2>
+  <div id="login">
+    <input id="room" placeholder="Room name" />
+    <input id="user" placeholder="Your name" />
+    <button id="loginBtn">Login</button>
+  </div>
+  <div id="player">
+    <div id="playlistContainer">
+      <h4>Playlist</h4>
+      <ul id="playlist"></ul>
+    </div>
+    <audio id="audio" controls preload="auto"></audio>
+    <div>
+      <button id="prevBtn">Prev</button>
+      <button id="playBtn">Play</button>
+      <button id="pauseBtn">Pause</button>
+      <button id="nextBtn">Next</button>
+      <button id="syncBtn">Sync</button>
+    </div>
+    <div>Users in room: <span id="users"></span></div>
+  </div>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="github_playlist.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
