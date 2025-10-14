@@ -1,6 +1,6 @@
 // Configuration: Set your GitHub repo details here
-const GITHUB_USER = 'your-username';
-const GITHUB_REPO = 'your-repo';
+const GITHUB_USER = 'sas25';
+const GITHUB_REPO = 'music-files';
 const GITHUB_BRANCH = 'main'; // or 'master'
 const AUDIO_PATH = 'audio'; // folder in your repo
 

@@ -4,9 +4,15 @@
   <meta charset="UTF-8">
   <title>Sync Music Player</title>
   <style>
-    body { font-family: sans-serif; max-width: 400px; margin: 2em auto; }
+    body { font-family: sans-serif; max-width: 600px; margin: 2em auto; }
     #login { margin-bottom: 2em; }
     #player { display: none; }
+    #uploadContainer { margin-bottom: 2em; padding: 1em; border: 1px solid #ddd; }
+    #playlistContainer { margin-bottom: 2em; }
+    #playlist { list-style: none; padding: 0; max-height: 200px; overflow-y: auto; border: 1px solid #eee; }
+    #uploadStatus { margin-top: 1em; font-weight: bold; }
+    .playlist-item { display: flex; justify-content: space-between; align-items: center; }
+    .delete-btn { background: #ff4444; color: white; border: none; padding: 2px 6px; font-size: 12px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -17,10 +23,19 @@
     <button id="loginBtn">Login</button>
   </div>
   <div id="player">
+    <div id="uploadContainer">
+      <h4>Upload Song</h4>
+      <input type="file" id="fileInput" accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,.opus" />
+      <button id="uploadBtn">Upload</button>
+      <div id="uploadStatus"></div>
+    </div>
+    
     <div id="playlistContainer">
       <h4>Playlist</h4>
       <ul id="playlist"></ul>
+      <button id="refreshBtn">Refresh Playlist</button>
     </div>
+    
     <audio id="audio" controls preload="auto"></audio>
     <div>
       <button id="prevBtn">Prev</button>
