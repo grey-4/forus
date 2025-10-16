@@ -1,20 +1,16 @@
 // Firebase Configuration - REPLACE WITH YOUR ACTUAL CONFIG
 // Get this from: Firebase Console → Project Settings → General → Your apps → Web app
 const firebaseConfig = {
-    apiKey: "AIzaSyC_EyaTwHYMP8oF5YQtHYZyfTcdTUFXCGg",
-    authDomain: "forus-sv.firebaseapp.com",
-    projectId: "forus-sv",
-    storageBucket: "forus-sv.firebasestorage.app",
-    messagingSenderId: "724044532685",
-    appId: "1:724044532685:web:d1a6c1a2283ed390859284"
+  apiKey: "AIzaSyC_EyaTwHYMP8oF5YQtHYZyfTcdTUrXCGg",
+  authDomain: "forus-sv.firebaseapp.com",
+  projectId: "forus-sv",
+  storageBucket: "forus-sv.firebasestorage.app",
+  messagingSenderId: "724044532685",
+  appId: "1:724044532685:web:d1a6c1a2283ed309859284"
 };
 
-// Initialize Firebase (NO STORAGE NEEDED)
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
-
-// Initialize services
-const auth = firebase.auth();
-const db = firebase.firestore();
 
 // GitHub Configuration (Edit via UI)
 let githubConfig = {
@@ -40,13 +36,24 @@ function saveGithubConfigToStorage() {
 
 // Update GitHub UI elements
 function updateGithubUI() {
-    document.getElementById('githubUser').textContent = githubConfig.user;
-    document.getElementById('githubRepo').textContent = githubConfig.repo;
-    document.getElementById('githubBranch').textContent = githubConfig.branch;
-    document.getElementById('githubPath').textContent = githubConfig.audioPath;
-    document.getElementById('repoName').textContent = githubConfig.repo;
-    document.getElementById('exampleUrl').textContent = 
-        `https://raw.githubusercontent.com/${githubConfig.user}/${githubConfig.repo}/${githubConfig.branch}/${githubConfig.audioPath}/[filename]`;
+    const elements = {
+        'githubUser': githubConfig.user,
+        'githubRepo': githubConfig.repo,
+        'githubBranch': githubConfig.branch,
+        'githubPath': githubConfig.audioPath,
+        'repoName': githubConfig.repo
+    };
+    
+    Object.entries(elements).forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    });
+    
+    const exampleElement = document.getElementById('exampleUrl');
+    if (exampleElement) {
+        exampleElement.textContent = 
+            `https://raw.githubusercontent.com/${githubConfig.user}/${githubConfig.repo}/${githubConfig.branch}/${githubConfig.audioPath}/[filename]`;
+    }
 }
 
 // GitHub Helper Functions
@@ -81,11 +88,7 @@ service cloud.firestore {
 }
 `;
 
-console.log('🔥 Firebase initialized (GitHub + Firestore hybrid mode)');
-console.log('📁 Audio files will be loaded from GitHub');
-console.log('⚡ Sync data will be stored in Firestore');
-console.log('🔒 Apply these security rules in Firebase Console > Firestore > Rules:');
-console.log(SECURITY_RULES);
+console.log('🔥 Firebase + GitHub Sync Music Player ready!');
 
 // Load config on startup
 loadGithubConfig();
