@@ -13,8 +13,19 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 // Initialize Firebase services (make them globally available)
-const auth = firebase.auth();
-const db = firebase.firestore();
+let auth, db;
+
+// Wait for Firebase to be ready
+firebase.auth().onAuthStateChanged(() => {
+    // Firebase is now ready
+    auth = firebase.auth();
+    db = firebase.firestore();
+    
+    // Trigger any initialization that depends on Firebase
+    if (typeof window.initializeSyncPlayer === 'function') {
+        window.initializeSyncPlayer();
+    }
+});
 
 // GitHub Configuration (Edit via UI)
 let githubConfig = {

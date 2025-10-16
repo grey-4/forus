@@ -482,17 +482,22 @@ function cancelGithubEdit() {
     document.getElementById('githubConfigEditor').classList.add('hidden');
 }
 
-// Initialize player
-const player = new GitHubFirebaseSyncPlayer();
+// Initialize player (will be set when Firebase is ready)
+let player;
+
+// Initialize player when Firebase is ready
+window.initializeSyncPlayer = function() {
+    player = new GitHubFirebaseSyncPlayer();
+};
 
 // Global functions for HTML buttons
-function joinRoom() { player.joinRoom(); }
-function loadGithubPlaylist() { player.loadGithubPlaylist(); }
-function addSongManually() { player.addSongManually(); }
-function selectTrack(index) { player.selectTrack(index); }
-function playPause() { player.playPause(); }
-function nextTrack() { player.nextTrack(); }
-function previousTrack() { player.previousTrack(); }
-function syncWithRoom() { player.syncWithRoom(); }
-function refreshPlaylist() { player.refreshPlaylist(); }
-function leaveRoom() { player.leaveRoom(); }
+function joinRoom() { if (player) player.joinRoom(); }
+function loadGithubPlaylist() { if (player) player.loadGithubPlaylist(); }
+function addSongManually() { if (player) player.addSongManually(); }
+function selectTrack(index) { if (player) player.selectTrack(index); }
+function playPause() { if (player) player.playPause(); }
+function nextTrack() { if (player) player.nextTrack(); }
+function previousTrack() { if (player) player.previousTrack(); }
+function syncWithRoom() { if (player) player.syncWithRoom(); }
+function refreshPlaylist() { if (player) player.refreshPlaylist(); }
+function leaveRoom() { if (player) player.leaveRoom(); }
