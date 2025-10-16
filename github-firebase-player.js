@@ -21,21 +21,73 @@ class GitHubFirebaseSyncPlayer {
         const roomId = document.getElementById('roomId').value.trim();
         const username = document.getElementById('username').value.trim();
         
+        // Validation rules
         if (!roomId || !username) {
             this.showStatus('Please enter room ID and username', 'error');
+            return;
+        }
+
+        // Room ID validation
+        if (roomId.length < 3 || roomId.length > 20) {
+            this.showStatus('Room ID must be 3-20 characters long', 'error');
+            return;
+        }
+
+        if (!/^[a-zA-Z0-9_-]+$/.test(roomId)) {
+            this.showStatus('Room ID can only contain letters, numbers, underscore, and dash', 'error');
+            return;
+        }
+
+        // Username validation
+        if (username.length < 2 || username.length > 15) {
+            this.showStatus('Username must be 2-15 characters long', 'error');
+            return;
+        }
+
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            this.showStatus('Username can only contain letters, numbers, and underscore', 'error');
             return;
         }
 
         try {
             this.showStatus('Connecting...', 'connected');
             
-            // Anonymous authentication
-            const userCredential = await auth.signInAnonymously();
+            // Force sign out first if someone is logged in
+            if (auth.currentUser) {
+                await auth.signOut();
+            }
+
+            // Anonymous authentication with timeout protection
+            const authPromise = auth.signInAnonymously();
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Authentication timeout after 10 seconds')), 10000)
+            );
+            
+            const userCredential = await Promise.race([authPromise, timeoutPromise]);
+            
+            // Double-check auth state
+            if (!auth.currentUser) {
+                throw new Error('Authentication succeeded but currentUser is still null');
+            }
+            
             this.currentUser = {
                 uid: userCredential.user.uid,
                 username: username,
                 joinedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
+            
+            // Check if username is already taken in this room
+            const roomDoc = await db.collection('rooms').doc(roomId).get();
+            if (roomDoc.exists) {
+                const roomData = roomDoc.data();
+                const userDetails = roomData.userDetails || {};
+                const existingUsernames = Object.values(userDetails).map(user => user.username.toLowerCase());
+                
+                if (existingUsernames.includes(username.toLowerCase())) {
+                    this.showStatus(`Username "${username}" is already taken in this room. Please choose another.`, 'error');
+                    return;
+                }
+            }
 
             // Join room
             await this.initializeRoom(roomId);
@@ -64,9 +116,16 @@ class GitHubFirebaseSyncPlayer {
     async initializeRoom(roomId) {
         const roomRef = db.collection('rooms').doc(roomId);
         
-        // Add user to room
+        // FORCE CLEANUP: Remove ALL existing users first to ensure clean state
         await roomRef.set({
-            users: firebase.firestore.FieldValue.arrayUnion(this.currentUser.uid),
+            users: [],
+            userDetails: {},
+            lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        // Then add only the current user
+        await roomRef.set({
+            users: [this.currentUser.uid],
             userDetails: {
                 [this.currentUser.uid]: this.currentUser
             },
@@ -82,6 +141,41 @@ class GitHubFirebaseSyncPlayer {
             lastUpdate: firebase.firestore.FieldValue.serverTimestamp(),
             updatedBy: this.currentUser.uid
         }, { merge: true });
+
+        // Set up immediate cleanup on any disconnect
+        this.setupImmediateCleanup(roomId);
+    }
+
+    setupImmediateCleanup(roomId) {
+        const cleanup = async () => {
+            try {
+                const roomRef = db.collection('rooms').doc(roomId);
+                await roomRef.update({
+                    users: firebase.firestore.FieldValue.arrayRemove(this.currentUser.uid),
+                    [`userDetails.${this.currentUser.uid}`]: firebase.firestore.FieldValue.delete()
+                });
+            } catch (error) {
+                // Ignore cleanup errors
+            }
+        };
+
+        // Immediate cleanup on ANY page leave event
+        window.addEventListener('beforeunload', cleanup);
+        window.addEventListener('unload', cleanup);
+        window.addEventListener('pagehide', cleanup);
+        
+        // Cleanup on tab visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                cleanup();
+            }
+        });
+
+        // Cleanup on focus loss
+        window.addEventListener('blur', cleanup);
+        
+        // Store cleanup function for manual use
+        this.immediateCleanup = cleanup;
     }
 
     startListeners() {
@@ -120,7 +214,6 @@ class GitHubFirebaseSyncPlayer {
     async loadGithubPlaylist() {
         try {
             const apiUrl = getGithubApiUrl();
-            console.log('Loading from GitHub:', apiUrl);
             
             const response = await fetch(apiUrl);
             if (!response.ok) {
@@ -150,8 +243,6 @@ class GitHubFirebaseSyncPlayer {
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedBy: this.currentUser.uid
             });
-
-            console.log(`Loaded ${githubPlaylist.length} songs from GitHub`);
             
         } catch (error) {
             console.error('Error loading GitHub playlist:', error);
@@ -245,7 +336,6 @@ class GitHubFirebaseSyncPlayer {
         const track = this.playlist[index];
         
         if (track) {
-            console.log('Loading track:', track.url);
             this.audioPlayer.src = track.url;
             document.getElementById('currentTrack').textContent = track.title;
             
@@ -327,8 +417,6 @@ class GitHubFirebaseSyncPlayer {
             return;
         }
 
-        console.log('Handling sync update:', data);
-
         // Find track by ID
         if (data.currentTrack) {
             const trackIndex = this.playlist.findIndex(t => t.id === data.currentTrack);
@@ -402,7 +490,7 @@ class GitHubFirebaseSyncPlayer {
     }
 
     onAudioReady() {
-        console.log('Audio ready:', this.audioPlayer.src);
+        // Audio is ready for playback
     }
 
     onAudioError(e) {
@@ -425,61 +513,49 @@ class GitHubFirebaseSyncPlayer {
     }
 
     async leaveRoom() {
+        // Clean up listeners
         if (this.syncListener) this.syncListener();
         if (this.usersListener) this.usersListener();
         if (this.playlistListener) this.playlistListener();
         
+        // Properly stop and clean up audio player
         try {
-            // Remove user from room
-            await db.collection('rooms').doc(this.currentRoom).update({
-                users: firebase.firestore.FieldValue.arrayRemove(this.currentUser.uid),
-                [`userDetails.${this.currentUser.uid}`]: firebase.firestore.FieldValue.delete()
-            });
+            this.audioPlayer.pause();
+            this.audioPlayer.removeAttribute('src');
+            this.audioPlayer.load();
         } catch (error) {
-            console.error('Error leaving room:', error);
+            console.warn('Audio cleanup warning:', error);
         }
         
-        await auth.signOut();
+        // Immediate cleanup
+        if (this.immediateCleanup) {
+            await this.immediateCleanup();
+        }
+        
+        try {
+            await auth.signOut();
+        } catch (error) {
+            console.warn('Sign out warning:', error);
+        }
         
         document.getElementById('authSection').classList.remove('hidden');
         document.getElementById('appSection').classList.add('hidden');
         
+        // Reset UI elements
+        document.getElementById('currentTrack').textContent = 'None';
+        document.getElementById('roomTime').textContent = '0:00';
+        document.getElementById('playlist').innerHTML = '';
+        document.getElementById('usersContainer').innerHTML = '';
+        
+        // Reset form borders
+        document.getElementById('roomId').style.borderColor = '#ddd';
+        document.getElementById('username').style.borderColor = '#ddd';
+        
         this.currentRoom = null;
         this.currentUser = null;
         this.playlist = [];
-        this.audioPlayer.src = '';
+        this.currentTrackIndex = 0;
     }
-}
-
-// GitHub Config Management
-function editGithubConfig() {
-    document.getElementById('editGithubUser').value = githubConfig.user;
-    document.getElementById('editGithubRepo').value = githubConfig.repo;
-    document.getElementById('editGithubBranch').value = githubConfig.branch;
-    document.getElementById('editGithubPath').value = githubConfig.audioPath;
-    document.getElementById('githubConfigEditor').classList.remove('hidden');
-}
-
-function saveGithubConfig() {
-    githubConfig.user = document.getElementById('editGithubUser').value.trim();
-    githubConfig.repo = document.getElementById('editGithubRepo').value.trim();
-    githubConfig.branch = document.getElementById('editGithubBranch').value.trim();
-    githubConfig.audioPath = document.getElementById('editGithubPath').value.trim();
-    
-    if (!githubConfig.user || !githubConfig.repo || !githubConfig.branch) {
-        alert('Please fill in all GitHub configuration fields');
-        return;
-    }
-    
-    saveGithubConfigToStorage();
-    updateGithubUI();
-    document.getElementById('githubConfigEditor').classList.add('hidden');
-    
-    alert('GitHub configuration saved! You can now load your playlist.');
-}
-
-function cancelGithubEdit() {
-    document.getElementById('githubConfigEditor').classList.add('hidden');
 }
 
 // Initialize player (will be set when Firebase is ready)

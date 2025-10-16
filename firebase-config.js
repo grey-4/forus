@@ -16,7 +16,7 @@ firebase.initializeApp(firebaseConfig);
 let auth, db;
 
 // Wait for Firebase to be ready
-firebase.auth().onAuthStateChanged(() => {
+firebase.auth().onAuthStateChanged((user) => {
     // Firebase is now ready
     auth = firebase.auth();
     db = firebase.firestore();
@@ -32,7 +32,8 @@ let githubConfig = {
     user: 'sas25',
     repo: 'music-files',
     branch: 'main',
-    audioPath: 'audio'
+    audioPath: 'audio',
+    repoLink: 'https://github.com/sas25/music-files'
 };
 
 // Load GitHub config from localStorage
@@ -51,23 +52,54 @@ function saveGithubConfigToStorage() {
 
 // Update GitHub UI elements
 function updateGithubUI() {
-    const elements = {
-        'githubUser': githubConfig.user,
-        'githubRepo': githubConfig.repo,
-        'githubBranch': githubConfig.branch,
-        'githubPath': githubConfig.audioPath,
-        'repoName': githubConfig.repo
-    };
+    const userInput = document.getElementById('githubUser');
+    const repoLinkInput = document.getElementById('repoLink');
     
-    Object.entries(elements).forEach(([id, value]) => {
-        const element = document.getElementById(id);
-        if (element) element.textContent = value;
-    });
+    if (userInput) {
+        userInput.value = githubConfig.user;
+        userInput.addEventListener('input', function() {
+            githubConfig.user = this.value.trim();
+            updateRepoFromUserInput();
+            saveGithubConfigToStorage();
+        });
+    }
     
-    const exampleElement = document.getElementById('exampleUrl');
-    if (exampleElement) {
-        exampleElement.textContent = 
-            `https://raw.githubusercontent.com/${githubConfig.user}/${githubConfig.repo}/${githubConfig.branch}/${githubConfig.audioPath}/[filename]`;
+    if (repoLinkInput) {
+        repoLinkInput.value = githubConfig.repoLink;
+        repoLinkInput.addEventListener('input', function() {
+            githubConfig.repoLink = this.value.trim();
+            parseRepoLink();
+            saveGithubConfigToStorage();
+        });
+    }
+}
+
+// Update repo link when username changes
+function updateRepoFromUserInput() {
+    githubConfig.repoLink = `https://github.com/${githubConfig.user}/${githubConfig.repo}`;
+    const repoLinkInput = document.getElementById('repoLink');
+    if (repoLinkInput) {
+        repoLinkInput.value = githubConfig.repoLink;
+    }
+}
+
+// Parse repository details from GitHub URL
+function parseRepoLink() {
+    try {
+        const url = githubConfig.repoLink;
+        const match = url.match(/github\.com\/([^\/]+)\/([^\/\?#]+)/);
+        if (match) {
+            githubConfig.user = match[1];
+            githubConfig.repo = match[2].replace(/\.git$/, ''); // Remove .git extension if present
+            
+            // Update username input
+            const userInput = document.getElementById('githubUser');
+            if (userInput) {
+                userInput.value = githubConfig.user;
+            }
+        }
+    } catch (error) {
+        console.warn('Could not parse repository URL:', error);
     }
 }
 
@@ -85,25 +117,49 @@ const SECURITY_RULES = `
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Rooms - only authenticated users can read/write
-    match /rooms/{roomId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Room sync data - only authenticated users
-    match /sync/{roomId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Playlist metadata - only authenticated users
-    match /playlists/{playlistId} {
+    // Allow all authenticated users to read/write everything (for development)
+    match /{document=**} {
       allow read, write: if request.auth != null;
     }
   }
 }
 `;
 
-console.log('🔥 Firebase + GitHub Sync Music Player ready!');
-
 // Load config on startup
 loadGithubConfig();
+
+// Add input validation
+document.addEventListener('DOMContentLoaded', function() {
+    const roomIdInput = document.getElementById('roomId');
+    const usernameInput = document.getElementById('username');
+    
+    if (roomIdInput) {
+        roomIdInput.addEventListener('input', function() {
+            // Visual feedback only - don't auto-remove characters
+            const isValid = /^[a-zA-Z0-9_-]*$/.test(this.value) && this.value.length >= 3;
+            
+            if (this.value.length === 0) {
+                this.style.borderColor = '#ddd';
+            } else if (!isValid || this.value.length < 3) {
+                this.style.borderColor = '#dc3545'; // Red for invalid
+            } else {
+                this.style.borderColor = '#28a745'; // Green for valid
+            }
+        });
+    }
+    
+    if (usernameInput) {
+        usernameInput.addEventListener('input', function() {
+            // Visual feedback only - don't auto-remove characters
+            const isValid = /^[a-zA-Z0-9_]*$/.test(this.value) && this.value.length >= 2;
+            
+            if (this.value.length === 0) {
+                this.style.borderColor = '#ddd';
+            } else if (!isValid || this.value.length < 2) {
+                this.style.borderColor = '#dc3545'; // Red for invalid
+            } else {
+                this.style.borderColor = '#28a745'; // Green for valid
+            }
+        });
+    }
+});

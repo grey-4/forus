@@ -36,8 +36,14 @@
     <div id="authSection" class="container">
         <h3>Join Room</h3>
         <div class="auth-form">
-            <input type="text" id="roomId" placeholder="Room ID" value="room1">
-            <input type="text" id="username" placeholder="Username">
+            <div>
+                <input type="text" id="roomId" placeholder="Room ID (3-20 chars)" value="room1" maxlength="20">
+                <small style="display: block; color: #666; font-size: 12px; margin-top: 2px;">Letters, numbers, dash (-), underscore (_) only</small>
+            </div>
+            <div style="margin-top: 10px;">
+                <input type="text" id="username" placeholder="Username (2-15 chars)" maxlength="15">
+                <small style="display: block; color: #666; font-size: 12px; margin-top: 2px;">Letters, numbers, underscore (_) only</small>
+            </div>
             <button onclick="joinRoom()">Join Room</button>
         </div>
         <div id="connectionStatus" class="status hidden"></div>
@@ -53,32 +59,15 @@
         </div>
 
         <div class="container github-setup">
-            <h3>📁 GitHub Music Repository Setup</h3>
-            <p><strong>Current GitHub Config:</strong></p>
+            <h3>📁 GitHub Music Repository</h3>
+            <div style="margin-bottom: 10px;">
+                <strong>GitHub Username:</strong> 
+                <input type="text" id="githubUser" value="sas25" style="margin-left: 10px; padding: 5px;">
+            </div>
             <div>
-                <strong>User:</strong> <span id="githubUser">sas25</span> 
-                <button onclick="editGithubConfig()" style="margin-left: 10px; padding: 2px 8px;">Edit</button>
+                <strong>Repository Link:</strong> 
+                <input type="text" id="repoLink" value="https://github.com/sas25/music-files" style="margin-left: 10px; padding: 5px; width: 300px;" placeholder="https://github.com/username/repo-name">
             </div>
-            <div><strong>Repo:</strong> <span id="githubRepo">music-files</span></div>
-            <div><strong>Branch:</strong> <span id="githubBranch">main</span></div>
-            <div><strong>Audio Folder:</strong> <span id="githubPath">audio</span></div>
-            
-            <div id="githubConfigEditor" class="hidden" style="margin-top: 10px;">
-                <input type="text" id="editGithubUser" placeholder="GitHub Username">
-                <input type="text" id="editGithubRepo" placeholder="Repository Name">
-                <input type="text" id="editGithubBranch" placeholder="Branch (main/master)">
-                <input type="text" id="editGithubPath" placeholder="Audio Folder Path">
-                <button onclick="saveGithubConfig()">Save</button>
-                <button onclick="cancelGithubEdit()">Cancel</button>
-            </div>
-            
-            <p><strong>📋 Setup Instructions:</strong></p>
-            <ol>
-                <li>Create a public GitHub repository named "<span id="repoName">music-files</span>"</li>
-                <li>Create an "audio" folder in your repo</li>
-                <li>Upload your music files (.mp3, .wav, etc.) to the audio folder</li>
-                <li>Your files will be accessible at: <span class="github-url" id="exampleUrl">https://raw.githubusercontent.com/sas25/music-files/main/audio/[filename]</span></li>
-            </ol>
         </div>
 
         <div class="container playlist-manager">
