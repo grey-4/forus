@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub + Firebase Sync Music Player</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .container { background: #f5f5f5; padding: 20px; border-radius: 10px; margin: 10px 0; }
+        .playlist-item { background: white; padding: 10px; margin: 5px 0; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+        .playlist-item:hover { background: #e0e0e0; }
+        .playlist-item.active { background: #007bff; color: white; }
+        .controls { display: flex; gap: 10px; margin: 10px 0; }
+        .controls button { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; background: #007bff; color: white; }
+        .controls button:hover { background: #0056b3; }
+        .auth-form { margin-bottom: 20px; }
+        .auth-form input { margin: 5px; padding: 8px; border-radius: 3px; border: 1px solid #ddd; }
+        .auth-form button { padding: 8px 15px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        .users-list { background: #e8f5e9; padding: 10px; border-radius: 5px; }
+        .github-setup { background: #fff3cd; padding: 15px; border-radius: 5px; border-left: 4px solid #ffc107; }
+        .playlist-manager { background: #e3f2fd; padding: 15px; border-radius: 5px; }
+        #audioPlayer { width: 100%; margin: 10px 0; }
+        .hidden { display: none; }
+        .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .github-url { font-family: monospace; background: #f8f9fa; padding: 5px; border-radius: 3px; }
+        .add-song-form { display: flex; gap: 10px; margin: 10px 0; align-items: center; }
+        .add-song-form input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 3px; }
+        .add-song-form button { padding: 8px 15px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>🎵 GitHub + Firebase Sync Music Player</h1>
+    
+    <div id="authSection" class="container">
+        <h3>Join Room</h3>
+        <div class="auth-form">
+            <input type="text" id="roomId" placeholder="Room ID" value="room1">
+            <input type="text" id="username" placeholder="Username">
+            <button onclick="joinRoom()">Join Room</button>
+        </div>
+        <div id="connectionStatus" class="status hidden"></div>
+    </div>
+
+    <div id="appSection" class="hidden">
+        <div class="container">
+            <h3>Room: <span id="currentRoom"></span></h3>
+            <div id="usersList" class="users-list">
+                <strong>Users in room:</strong>
+                <div id="usersContainer"></div>
+            </div>
+        </div>
+
+        <div class="container github-setup">
+            <h3>📁 GitHub Music Repository Setup</h3>
+            <p><strong>Current GitHub Config:</strong></p>
+            <div>
+                <strong>User:</strong> <span id="githubUser">sas25</span> 
+                <button onclick="editGithubConfig()" style="margin-left: 10px; padding: 2px 8px;">Edit</button>
+            </div>
+            <div><strong>Repo:</strong> <span id="githubRepo">music-files</span></div>
+            <div><strong>Branch:</strong> <span id="githubBranch">main</span></div>
+            <div><strong>Audio Folder:</strong> <span id="githubPath">audio</span></div>
+            
+            <div id="githubConfigEditor" class="hidden" style="margin-top: 10px;">
+                <input type="text" id="editGithubUser" placeholder="GitHub Username">
+                <input type="text" id="editGithubRepo" placeholder="Repository Name">
+                <input type="text" id="editGithubBranch" placeholder="Branch (main/master)">
+                <input type="text" id="editGithubPath" placeholder="Audio Folder Path">
+                <button onclick="saveGithubConfig()">Save</button>
+                <button onclick="cancelGithubEdit()">Cancel</button>
+            </div>
+            
+            <p><strong>📋 Setup Instructions:</strong></p>
+            <ol>
+                <li>Create a public GitHub repository named "<span id="repoName">music-files</span>"</li>
+                <li>Create an "audio" folder in your repo</li>
+                <li>Upload your music files (.mp3, .wav, etc.) to the audio folder</li>
+                <li>Your files will be accessible at: <span class="github-url" id="exampleUrl">https://raw.githubusercontent.com/sas25/music-files/main/audio/[filename]</span></li>
+            </ol>
+        </div>
+
+        <div class="container playlist-manager">
+            <h3>🎵 Playlist Manager</h3>
+            <button onclick="loadGithubPlaylist()" style="background: #28a745;">📥 Load from GitHub</button>
+            <button onclick="refreshPlaylist()" style="background: #6f42c1;">🔄 Refresh</button>
+            
+            <div style="margin: 15px 0;">
+                <strong>➕ Add Song Manually:</strong>
+                <div class="add-song-form">
+                    <input type="text" id="songFilename" placeholder="Filename (e.g., song.mp3)">
+                    <input type="text" id="songTitle" placeholder="Display Title (optional)">
+                    <button onclick="addSongManually()">Add Song</button>
+                </div>
+                <small>💡 Add the filename of a song you've uploaded to your GitHub repo</small>
+            </div>
+        </div>
+
+        <div class="container">
+            <h3>📋 Playlist</h3>
+            <div id="playlist"></div>
+        </div>
+
+        <div class="container">
+            <h3>🎮 Player Controls</h3>
+            <audio id="audioPlayer" controls crossorigin="anonymous"></audio>
+            <div class="controls">
+                <button onclick="previousTrack()">⏮ Prev</button>
+                <button onclick="playPause()">⏯ Play/Pause</button>
+                <button onclick="nextTrack()">⏭ Next</button>
+                <button onclick="syncWithRoom()">🔄 Sync</button>
+            </div>
+            <div>
+                <strong>Current Track:</strong> <span id="currentTrack">None</span><br>
+                <strong>Room Time:</strong> <span id="roomTime">0:00</span>
+            </div>
+        </div>
+
+        <button onclick="leaveRoom()" style="background: #dc3545; color: white; border: none; padding: 10px; border-radius: 5px;">Leave Room</button>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <script src="firebase-config.js"></script>
+    <script src="github-firebase-player.js"></script>
+</body>
+</html>
