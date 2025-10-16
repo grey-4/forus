@@ -29,11 +29,11 @@ firebase.auth().onAuthStateChanged((user) => {
 
 // GitHub Configuration (Edit via UI)
 let githubConfig = {
-    user: 'sas25',
-    repo: 'music-files',
+    user: 'grey-4',
+    repo: 'songs',
     branch: 'main',
-    audioPath: 'audio',
-    repoLink: 'https://github.com/sas25/music-files'
+    audioPath: '',  // Files are in root directory, not in a subfolder
+    repoLink: 'https://github.com/grey-4/songs'
 };
 
 // Load GitHub config from localStorage
@@ -105,11 +105,13 @@ function parseRepoLink() {
 
 // GitHub Helper Functions
 function getGithubAudioUrl(filename) {
-    return `https://raw.githubusercontent.com/${githubConfig.user}/${githubConfig.repo}/${githubConfig.branch}/${githubConfig.audioPath}/${filename}`;
+    const path = githubConfig.audioPath ? `${githubConfig.audioPath}/` : '';
+    return `https://raw.githubusercontent.com/${githubConfig.user}/${githubConfig.repo}/${githubConfig.branch}/${path}${filename}`;
 }
 
 function getGithubApiUrl() {
-    return `https://api.github.com/repos/${githubConfig.user}/${githubConfig.repo}/contents/${githubConfig.audioPath}?ref=${githubConfig.branch}`;
+    const path = githubConfig.audioPath || '';
+    return `https://api.github.com/repos/${githubConfig.user}/${githubConfig.repo}/contents/${path}?ref=${githubConfig.branch}`;
 }
 
 // Firestore Security Rules (COPY TO FIREBASE CONSOLE)

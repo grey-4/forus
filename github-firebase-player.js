@@ -300,6 +300,19 @@ class GitHubFirebaseSyncPlayer {
 
     // GitHub Integration
     async loadGithubPlaylist() {
+        // Check if we're in a room (more lenient check)
+        const currentRoomElement = document.getElementById('currentRoom');
+        const roomName = currentRoomElement ? currentRoomElement.textContent : null;
+        
+        if (!roomName || roomName.trim() === '') {
+            alert('Please join a room first before loading from GitHub');
+            return;
+        }
+
+        // Use the room from UI if this.currentRoom is not set
+        const roomToUse = this.currentRoom || roomName;
+        const userToUse = this.currentUser || { uid: auth.currentUser?.uid || 'anonymous' };
+
         try {
             const apiUrl = getGithubApiUrl();
             
@@ -314,6 +327,11 @@ class GitHubFirebaseSyncPlayer {
                 /\.(mp3|wav|ogg|m4a|aac|flac|opus)$/i.test(file.name)
             );
 
+            if (audioFiles.length === 0) {
+                alert('No audio files found in the repository. Make sure your repository contains .mp3, .wav, .ogg, or other audio files.');
+                return;
+            }
+
             // Convert to playlist format
             const githubPlaylist = audioFiles.map(file => ({
                 id: `github_${file.sha}`,
@@ -321,24 +339,48 @@ class GitHubFirebaseSyncPlayer {
                 title: file.name.replace(/\.[^/.]+$/, ""), // Remove extension
                 url: getGithubAudioUrl(file.name),
                 source: 'github',
-                addedBy: this.currentUser.uid,
-                addedAt: firebase.firestore.FieldValue.serverTimestamp()
+                addedBy: userToUse.uid,
+                addedAt: Date.now() // Use timestamp instead of serverTimestamp in array
             }));
 
             // Save to Firestore for room sharing
-            await db.collection('playlists').doc(this.currentRoom).set({
+            await db.collection('playlists').doc(roomToUse).set({
                 songs: githubPlaylist,
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedBy: this.currentUser.uid
+                updatedBy: userToUse.uid
             });
+
+            // Auto-select the first song if no track is currently selected
+            if (githubPlaylist.length > 0 && (!this.playlist || this.playlist.length === 0)) {
+                // Update local playlist first
+                this.playlist = githubPlaylist;
+                this.renderPlaylist();
+                // Select the first track
+                await this.selectTrack(0);
+            }
+
+            alert(`Successfully loaded ${audioFiles.length} songs from GitHub!`);
             
         } catch (error) {
             console.error('Error loading GitHub playlist:', error);
-            alert('Failed to load from GitHub: ' + error.message + '\n\nMake sure:\n1. Repository exists and is public\n2. Audio folder exists\n3. Repository contains audio files');
+            alert('Failed to load from GitHub: ' + error.message + '\n\nMake sure:\n1. Repository exists and is public\n2. Repository contains audio files\n3. Repository URL is correct');
         }
     }
 
     async addSongManually() {
+        // Check if we're in a room (more lenient check)
+        const currentRoomElement = document.getElementById('currentRoom');
+        const roomName = currentRoomElement ? currentRoomElement.textContent : null;
+        
+        if (!roomName || roomName.trim() === '') {
+            alert('Please join a room first before adding songs');
+            return;
+        }
+
+        // Use the room from UI if this.currentRoom is not set
+        const roomToUse = this.currentRoom || roomName;
+        const userToUse = this.currentUser || { uid: auth.currentUser?.uid || 'anonymous' };
+
         const filename = document.getElementById('songFilename').value.trim();
         const title = document.getElementById('songTitle').value.trim();
         
@@ -353,18 +395,18 @@ class GitHubFirebaseSyncPlayer {
             title: title || filename.replace(/\.[^/.]+$/, ""),
             url: getGithubAudioUrl(filename),
             source: 'manual',
-            addedBy: this.currentUser.uid,
-            addedAt: firebase.firestore.FieldValue.serverTimestamp()
+            addedBy: userToUse.uid,
+            addedAt: Date.now() // Use timestamp instead of serverTimestamp in array
         };
 
         // Add to current playlist
         const updatedPlaylist = [...this.playlist, song];
         
         // Save to Firestore
-        await db.collection('playlists').doc(this.currentRoom).set({
+        await db.collection('playlists').doc(roomToUse).set({
             songs: updatedPlaylist,
             lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-            updatedBy: this.currentUser.uid
+            updatedBy: userToUse.uid
         });
 
         // Clear inputs
@@ -373,6 +415,11 @@ class GitHubFirebaseSyncPlayer {
     }
 
     async loadPlaylist() {
+        // Check if user is properly authenticated
+        if (!this.currentRoom) {
+            return;
+        }
+
         try {
             const playlistDoc = await db.collection('playlists').doc(this.currentRoom).get();
             if (playlistDoc.exists) {
@@ -427,7 +474,7 @@ class GitHubFirebaseSyncPlayer {
             this.audioPlayer.src = track.url;
             document.getElementById('currentTrack').textContent = track.title;
             
-            // Sync with room
+            // Sync with room - notify all other devices
             await this.updateRoomSync({
                 currentTrack: track.id,
                 currentTime: 0,
@@ -477,10 +524,17 @@ class GitHubFirebaseSyncPlayer {
 
     async syncWithRoom() {
         try {
-            const syncDoc = await db.collection('sync').doc(this.currentRoom).get();
+            const roomToUse = this.currentRoom || document.getElementById('currentRoom')?.textContent;
+            if (!roomToUse) {
+                alert('Not connected to a room');
+                return;
+            }
+            
+            const syncDoc = await db.collection('sync').doc(roomToUse).get();
             if (syncDoc.exists) {
                 const data = syncDoc.data();
                 this.handleSyncUpdate(data, true);
+                console.log('🔄 Manual sync completed');
             }
         } catch (error) {
             console.error('Sync error:', error);
@@ -489,10 +543,19 @@ class GitHubFirebaseSyncPlayer {
 
     async updateRoomSync(updates) {
         try {
-            await db.collection('sync').doc(this.currentRoom).update({
+            // Use fallback values if internal variables aren't set
+            const roomToUse = this.currentRoom || document.getElementById('currentRoom')?.textContent;
+            const userToUse = this.currentUser || { uid: auth.currentUser?.uid || 'anonymous' };
+            
+            if (!roomToUse) {
+                console.warn('No room available for sync');
+                return;
+            }
+
+            await db.collection('sync').doc(roomToUse).update({
                 ...updates,
                 lastUpdate: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedBy: this.currentUser.uid
+                updatedBy: userToUse.uid
             });
         } catch (error) {
             console.error('Update sync error:', error);
@@ -500,16 +563,25 @@ class GitHubFirebaseSyncPlayer {
     }
 
     async handleSyncUpdate(data, forceSync = false) {
+        // Get current user ID for comparison
+        const currentUserId = this.currentUser?.uid || auth.currentUser?.uid || 'anonymous';
+        
         // Don't sync our own updates unless forced
-        if (data.updatedBy === this.currentUser.uid && !forceSync) {
+        if (data.updatedBy === currentUserId && !forceSync) {
             return;
         }
 
-        // Find track by ID
+        console.log('🔄 Syncing from another device:', data);
+
+        // Find track by ID and switch if different
         if (data.currentTrack) {
             const trackIndex = this.playlist.findIndex(t => t.id === data.currentTrack);
             if (trackIndex !== -1 && trackIndex !== this.currentTrackIndex) {
-                await this.selectTrack(trackIndex);
+                this.currentTrackIndex = trackIndex;
+                const track = this.playlist[trackIndex];
+                this.audioPlayer.src = track.url;
+                document.getElementById('currentTrack').textContent = track.title;
+                this.renderPlaylist();
             }
         }
 
@@ -518,16 +590,20 @@ class GitHubFirebaseSyncPlayer {
             this.audioPlayer.currentTime = data.currentTime || 0;
             try {
                 await this.audioPlayer.play();
+                console.log('▶️ Started playing (synced from room)');
             } catch (e) {
                 console.warn('Auto-play blocked:', e);
+                alert('Another user started playback. Click play to sync.');
             }
         } else if (!data.isPlaying && !this.audioPlayer.paused) {
             this.audioPlayer.pause();
+            console.log('⏸️ Paused (synced from room)');
         }
 
         // Sync time (allow small tolerance)
         if (Math.abs(this.audioPlayer.currentTime - (data.currentTime || 0)) > 2) {
             this.audioPlayer.currentTime = data.currentTime || 0;
+            console.log('⏱️ Time synced to:', data.currentTime);
         }
     }
 
@@ -597,6 +673,11 @@ class GitHubFirebaseSyncPlayer {
     }
 
     async refreshPlaylist() {
+        // Check if user is properly authenticated
+        if (!this.currentRoom) {
+            alert('Please join a room first');
+            return;
+        }
         await this.loadPlaylist();
     }
 
