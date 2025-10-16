@@ -12,6 +12,10 @@ const firebaseConfig = {
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 
+// Initialize Firebase services (make them globally available)
+const auth = firebase.auth();
+const db = firebase.firestore();
+
 // GitHub Configuration (Edit via UI)
 let githubConfig = {
     user: 'sas25',
