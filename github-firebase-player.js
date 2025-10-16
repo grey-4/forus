@@ -116,16 +116,9 @@ class GitHubFirebaseSyncPlayer {
     async initializeRoom(roomId) {
         const roomRef = db.collection('rooms').doc(roomId);
         
-        // FORCE CLEANUP: Remove ALL existing users first to ensure clean state
+        // Add current user to room (don't clear existing users)
         await roomRef.set({
-            users: [],
-            userDetails: {},
-            lastActivity: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        
-        // Then add only the current user
-        await roomRef.set({
-            users: [this.currentUser.uid],
+            users: firebase.firestore.FieldValue.arrayUnion(this.currentUser.uid),
             userDetails: {
                 [this.currentUser.uid]: this.currentUser
             },
@@ -147,8 +140,15 @@ class GitHubFirebaseSyncPlayer {
     }
 
     setupImmediateCleanup(roomId) {
+        // Start presence heartbeat to show we're active
+        this.startPresenceHeartbeat(roomId);
+
         const cleanup = async () => {
             try {
+                // Stop heartbeat first
+                this.stopPresenceHeartbeat();
+                
+                // Remove from room
                 const roomRef = db.collection('rooms').doc(roomId);
                 await roomRef.update({
                     users: firebase.firestore.FieldValue.arrayRemove(this.currentUser.uid),
@@ -164,18 +164,106 @@ class GitHubFirebaseSyncPlayer {
         window.addEventListener('unload', cleanup);
         window.addEventListener('pagehide', cleanup);
         
-        // Cleanup on tab visibility change
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                cleanup();
-            }
-        });
-
-        // Cleanup on focus loss
-        window.addEventListener('blur', cleanup);
-        
         // Store cleanup function for manual use
         this.immediateCleanup = cleanup;
+    }
+
+    startPresenceHeartbeat(roomId) {
+        // Send heartbeat every 10 seconds to show we're alive
+        this.heartbeatInterval = setInterval(async () => {
+            try {
+                await db.collection('presence').doc(`${roomId}_${this.currentUser.uid}`).set({
+                    userId: this.currentUser.uid,
+                    username: this.currentUser.username,
+                    roomId: roomId,
+                    lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+                    online: true
+                });
+            } catch (error) {
+                // Ignore heartbeat errors
+            }
+        }, 10000); // 10 seconds
+
+        // Monitor for stale users and remove them
+        this.monitorStaleUsers(roomId);
+    }
+
+    stopPresenceHeartbeat() {
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+        }
+        if (this.staleUserMonitor) {
+            clearInterval(this.staleUserMonitor);
+            this.staleUserMonitor = null;
+        }
+    }
+
+    monitorStaleUsers(roomId) {
+        // Check every 15 seconds for stale users
+        this.staleUserMonitor = setInterval(async () => {
+            try {
+                const now = Date.now();
+                const staleThreshold = 30000; // 30 seconds
+                
+                const presenceSnapshot = await db.collection('presence')
+                    .where('roomId', '==', roomId)
+                    .get();
+
+                const roomRef = db.collection('rooms').doc(roomId);
+                const roomDoc = await roomRef.get();
+                
+                if (roomDoc.exists) {
+                    const roomData = roomDoc.data();
+                    const currentUsers = roomData.users || [];
+                    const userDetails = roomData.userDetails || {};
+                    
+                    // Check which users are stale
+                    const activeUsers = new Set();
+                    presenceSnapshot.docs.forEach(doc => {
+                        const data = doc.data();
+                        const lastSeen = data.lastSeen ? data.lastSeen.toMillis() : 0;
+                        
+                        if (now - lastSeen <= staleThreshold) {
+                            activeUsers.add(data.userId);
+                        }
+                    });
+                    
+                    // Remove stale users from room
+                    const usersToRemove = currentUsers.filter(uid => !activeUsers.has(uid));
+                    
+                    if (usersToRemove.length > 0) {
+                        const updatedUsers = currentUsers.filter(uid => activeUsers.has(uid));
+                        const updatedUserDetails = {};
+                        
+                        // Keep only active users
+                        Object.keys(userDetails).forEach(uid => {
+                            if (activeUsers.has(uid)) {
+                                updatedUserDetails[uid] = userDetails[uid];
+                            }
+                        });
+                        
+                        // Update room
+                        await roomRef.set({
+                            users: updatedUsers,
+                            userDetails: updatedUserDetails,
+                            lastActivity: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+                        
+                        // Clean up stale presence records
+                        usersToRemove.forEach(async (uid) => {
+                            try {
+                                await db.collection('presence').doc(`${roomId}_${uid}`).delete();
+                            } catch (error) {
+                                // Ignore deletion errors
+                            }
+                        });
+                    }
+                }
+            } catch (error) {
+                // Ignore monitoring errors
+            }
+        }, 15000); // Check every 15 seconds
     }
 
     startListeners() {
@@ -513,6 +601,9 @@ class GitHubFirebaseSyncPlayer {
     }
 
     async leaveRoom() {
+        // Stop presence system
+        this.stopPresenceHeartbeat();
+        
         // Clean up listeners
         if (this.syncListener) this.syncListener();
         if (this.usersListener) this.usersListener();
